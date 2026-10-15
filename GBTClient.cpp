@@ -4,7 +4,7 @@
 #include "Stella.hpp"
 #include "main.hpp"
 
-const std::string cbMsg("/rM57/");
+const std::string cbMsg("/rM6a/");
 static std::vector<uint8_t> coinbaseGen(const std::vector<uint8_t> &scriptPubKey, const uint32_t height, const uint64_t coinbasevalue, const std::vector<uint8_t> &dwc) {
 	std::vector<uint8_t> coinbase;
 	// Version (01000000)

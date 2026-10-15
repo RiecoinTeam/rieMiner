@@ -1,5 +1,7 @@
-VER    = 2507
+VER    = 2610
 CXX    = g++
+CUDA   = /usr/local/cuda-13.4
+NVCC   = $(CUDA)/bin/nvcc -arch=sm_80
 M4     = m4
 AS     = as
 SED    = sed
@@ -7,6 +9,9 @@ CFLAGS = -Wall -Wextra -std=c++17 -O3 -fno-pie -no-pie
 LIBS   = -lcurl -lgmpxx -lgmp
 
 all: native
+
+cuda: rieMinerCuda
+cuda: CFLAGS += -DRIEMINERCUDA=1 -march=native -g
 
 apple_silicon: CXX = clang++
 apple_silicon: CFLAGS += -march=armv8.3-a -target arm64-apple-macos -O3 -I/opt/homebrew/include -I/opt/homebrew/opt/gmp/include
@@ -84,16 +89,22 @@ rieMinerTestServer: TestServer.cpp
 rieMiner: main.o Stella.o StratumClient.o GBTClient.o Client.o API.o tools.o
 	$(CXX) $(CFLAGS) -o rieMiner $^ $(LIBS)
 
-rieMinerx64: main.o Stella.o StratumClient.o GBTClient.o Client.o API.o tools.o mod_1_4.o mod_1_2_avx.o mod_1_2_avx2.o fermat.o primetest.o primetest512.o
+rieMinerCuda: main.o StellaCuda.o StratumClient.o GBTClient.o Client.o API.o tools.o mod_1_4.o mod_1_2_avx.o mod_1_2_avx2.o fermatIspc.o fermatCuda.o primetest.o primetest512.o
+	$(CXX) $(CFLAGS) -L $(CUDA)/lib64 -o rieMiner $^ $(LIBS) -lcuda -lcudart
+
+rieMinerx64: main.o Stella.o StratumClient.o GBTClient.o Client.o API.o tools.o mod_1_4.o mod_1_2_avx.o mod_1_2_avx2.o fermatIspc.o primetest.o primetest512.o
 	$(CXX) $(CFLAGS) -o rieMiner $^ $(LIBS)
 
-rieMinerWin64: main.o Stella.o StratumClient.o GBTClient.o Client.o API.o tools.o mod_1_4_win.o mod_1_2_avx_win.o mod_1_2_avx2_win.o fermat.o primetest_win.o primetest512_win.o
+rieMinerWin64: main.o Stella.o StratumClient.o GBTClient.o Client.o API.o tools.o mod_1_4_win.o mod_1_2_avx_win.o mod_1_2_avx2_win.o fermatIspc.o primetest_win.o primetest512_win.o
 	$(CXX) $(CFLAGS) -o rieMiner $^ $(LIBS)
 
 main.o: main.cpp main.hpp Stella.hpp Client.hpp tools.hpp
 	$(CXX) $(CFLAGS) -c -o $@ -DversionShort=\"$(VER)\" -DversionString=\"rieMiner\ $(VER)\" main.cpp
 
 Stella.o: Stella.cpp Stella.hpp
+	$(CXX) $(CFLAGS) -c -o $@ Stella.cpp
+
+StellaCuda.o: Stella.cpp Stella.hpp
 	$(CXX) $(CFLAGS) -c -o $@ Stella.cpp
 
 StratumClient.o: StratumClient.cpp
@@ -111,7 +122,10 @@ API.o: API.cpp
 tools.o: tools.cpp
 	$(CXX) $(CFLAGS) -c -o $@ tools.cpp
 
-fermat.o: ispc/fermat.cpp
+fermatCuda.o: fermatCuda.cu
+	$(NVCC) -I external/cgbn fermatCuda.cu -c fermatCuda.o -lgmpo
+
+fermatIspc.o: ispc/fermat.cpp
 	$(CXX) $(CFLAGS) -c -o $@ ispc/fermat.cpp -Wno-unused-function -Wno-unused-parameter -Wno-strict-overflow
 
 mod_1_4_win.o: external/mod_1_4_win.asm

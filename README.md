@@ -18,6 +18,8 @@ We only provide binaries for Windows x64 and Linux x64 + Arm64. In other situati
 
 Memory usage can be reduced using the PrimeTableLimit option.
 
+The Riecoin Community is currently working on GPU Miners. Join the Riecoin Discord Server where we are currently the most active for the newest developments.
+
 ## Compile this program
 
 rieMiner should be compilable on recent Linuxes. Building on another system is not supported, and Debian 12 Amd64 is our reference OS. It should be used for cross compiling in order to generate binaries for other systems, that can be distributed. If you do not have Debian 12, you can install it in a virtual machine, as Dual Boot, or in a spare machine.
@@ -25,7 +27,7 @@ rieMiner should be compilable on recent Linuxes. Building on another system is n
 ### Native building
 
 Here is how to build rieMiner to run it directly on the same computer. Libraries are dynamically linked and G++ optimizes the build for your CPU, though this does actually not affect performance much.
-
+´
 You will need g++, as, m4, make, and the following dependencies:
 
 * [GMP](https://gmplib.org/)
@@ -68,6 +70,23 @@ make apple_silicon
 ```
 
 For other Linux, executing equivalent commands (using `pacman` instead of `apt`,...) should work.
+
+### Experimental Cuda Build
+
+This will build Cuda Code for the Fermat Primality Test. GPU Sieving has not yet been merged in this Repository.
+
+Instructions are similar to above, with extra or specific steps. Install the Nvidia's Cuda Toolkit, then get rieMiner's source code and modify these `Makefile` lines accordingly to point to your local Cuda Install and make a build compatible with your GPU.
+
+```
+CUDA   = /usr/local/cuda-13.4
+NVCC   = $(CUDA)/bin/nvcc -arch=sm_80
+```
+
+Make with:
+
+```bash
+make cuda
+```
 
 ### Static/Cross Compiling
 
@@ -235,6 +254,7 @@ rieMiner proposes the following Modes depending on what you want to do. Use the 
 * `RawOutput`: if you need to disable the coloring in the outputs, set this to `Yes`. Default : disabled;
 * `APIPort`: sets the port to use for the rieMiner's API server. 0 to disable the API. Default : 0;
 * `KeepRunning`: if you need to continue running the miner even if you find a tuple in Search mode, set this to `Yes` Default : disabled.
+* `FermatTestDevice`: only for a Cuda Build, set this to `GPUn` to use GPU n for Fermat Tests, something else to use the CPU. Default: `GPU0`.
 
 ## Interface
 

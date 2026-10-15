@@ -218,6 +218,22 @@ bool Configuration::parse(const int argc, char** argv, std::string &parsingMessa
 			else
 				_options.keepRunning = false;
 		}
+#ifdef RIEMINERCUDA
+		else if (key == "FermatTestDevice") {
+			_options.stellaConfig.gpuFermatTest = false;
+			if (value.size() > 3) {
+				if (value.substr(0, 3) == "GPU") {
+					try {
+						_options.stellaConfig.gpuFermatTestId = std::stoi(value.substr(3));
+						_options.stellaConfig.gpuFermatTest = true;
+					}
+					catch (...) {
+						_options.stellaConfig.gpuFermatTestId = 0U;
+					}
+				}
+			}
+		}
+#endif
 		else
 			parsingMessages += "Ignoring option with unused key '"s + key + "'\n"s;
 	}

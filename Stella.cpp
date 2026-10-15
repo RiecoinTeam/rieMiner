@@ -129,6 +129,10 @@ void Instance::init(const Configuration &configuration) {
 	}
 	
 	_pattern = configuration.pattern;
+#ifdef RIEMINERCUDA
+	_gpuFermatTest = configuration.gpuFermatTest;
+	_gpuFermatTestId = configuration.gpuFermatTestId;
+#endif
 	std::transform(_pattern.begin(), _pattern.end(), std::back_inserter(_halfPattern), [](uint64_t n) {return n >> 1;});
 	_patternMin = configuration.patternMin;
 	_primeCountTarget = configuration.primeCountTarget;
@@ -1012,8 +1016,9 @@ bool isPrimeFermat(const mpz_class& n) {
 	return r == 1;
 }
 
+// CPU Assembly optimized Fermat Test by Michael Bell
 #if defined(__SSE2__) && defined(__AVX2__)
-bool Instance::_testPrimesIspc(const std::array<uint32_t, maxCandidatesPerCheckTask> &factorOffsets, uint32_t is_prime[maxCandidatesPerCheckTask], const mpz_class &candidateStart, mpz_class &candidate) { // Assembly optimized prime testing by Michael Bell
+bool Instance::_testPrimesIspc(const std::array<uint32_t, maxCandidatesPerCheckTask> &factorOffsets, uint32_t primalityResults[maxCandidatesPerCheckTask], const mpz_class &candidateStart, mpz_class &candidate) {
 	uint32_t M[maxCandidatesPerCheckTask*MAX_N_SIZE], bits(0), N_Size;
 	uint32_t *mp(&M[0]);
 	for (uint32_t i(0) ; i < maxCandidatesPerCheckTask ; i++) {
@@ -1027,7 +1032,36 @@ bool Instance::_testPrimesIspc(const std::array<uint32_t, maxCandidatesPerCheckT
 		memcpy(mp, candidate.get_mpz_t()->_mp_d, N_Size*4);
 		mp += N_Size;
 	}
-	fermatTest(N_Size, maxCandidatesPerCheckTask, M, is_prime, sysInfo.hasAVX512());
+	fermatTest(N_Size, maxCandidatesPerCheckTask, M, primalityResults, sysInfo.hasAVX512());
+	return true;
+}
+#endif
+
+// OpenCL Fermat Test, Todo...
+
+// Cuda Fermat Test
+#ifdef RIEMINERCUDA
+bool Instance::_testPrimesCuda(const std::array<uint32_t, maxCandidatesPerCheckTask> &factorOffsets, std::vector<uint32_t> &primalityResults, const mpz_class &candidateStart, mpz_class &candidate, const uint16_t device) {
+	const auto bits(mpz_sizeinbase(candidateStart.get_mpz_t(), 2));
+	if (bits >= 2048)
+		return false;
+	std::vector<mpz_class> candidates;
+	for (uint32_t i(0) ; i < primalityResults.size() ; i++) {
+		candidate = candidateStart + _primorial*factorOffsets[i];
+		candidates.push_back(candidate);
+	}
+	if (bits < 768)
+		fermatCudaTest<768>(candidates, primalityResults.data(), device);
+	else if (bits < 1024)
+		fermatCudaTest<1024>(candidates, primalityResults.data(), device);
+	else if (bits < 1280)
+		fermatCudaTest<1280>(candidates, primalityResults.data(), device);
+	else if (bits < 1536)
+		fermatCudaTest<1536>(candidates, primalityResults.data(), device);
+	else if (bits < 1792)
+		fermatCudaTest<1792>(candidates, primalityResults.data(), device);
+	else
+		fermatCudaTest<2048>(candidates, primalityResults.data(), device);
 	return true;
 }
 #endif
@@ -1041,39 +1075,43 @@ void Instance::_doCheckTask(Task task) {
 	candidateStart += _works[workIndex].primorialMultipleStart;
 	candidateStart += _primorialOffsets[task.check.offsetId];
 	
+	bool firstTestDone(false); // by GPU or Assembly Optimized Implementation
+	const auto nCandidates(task.check.nCandidates);
+#if defined(RIEMINERCUDA) || (defined(__SSE2__) && defined(__AVX2__))
+	std::vector<uint32_t> primalityResults;
+#endif
+#if defined(RIEMINERCUDA)
+	if (_gpuFermatTest) { // Test candidates + 0 primality with Nvidia GPU if available.
+		primalityResults = std::vector<uint32_t>(task.check.nCandidates, 0);
+		firstTestDone = _testPrimesCuda(task.check.factorOffsets, primalityResults, candidateStart, candidate, _gpuFermatTestId);
+	}
+#endif
 #if defined(__SSE2__) && defined(__AVX2__)
-	bool firstTestDone(false);
-	if (task.check.nCandidates == maxCandidatesPerCheckTask) { // Test candidates + 0 primality with assembly optimizations if possible.
-		uint32_t isPrime[maxCandidatesPerCheckTask];
-		firstTestDone = _testPrimesIspc(task.check.factorOffsets, isPrime, candidateStart, candidate);
-		if (firstTestDone) {
-			tupleCounts[0] += maxCandidatesPerCheckTask;
-			task.check.nCandidates = 0;
-			for (uint32_t i(0) ; i < maxCandidatesPerCheckTask ; i++) {
-				if (isPrime[i]) {
-					task.check.factorOffsets[task.check.nCandidates++] = task.check.factorOffsets[i];
-					tupleCounts[1]++;
-				}
+	if (!firstTestDone && task.check.nCandidates == maxCandidatesPerCheckTask) { // Test candidates + 0 primality with assembly optimizations if possible.
+		primalityResults = std::vector<uint32_t>(maxCandidatesPerCheckTask, 0);
+		firstTestDone = _testPrimesIspc(task.check.factorOffsets, primalityResults.data(), candidateStart, candidate);
+	}
+#endif
+	if (firstTestDone) {
+		tupleCounts[0] += nCandidates;
+		task.check.nCandidates = 0;
+		for (uint32_t i(0) ; i < nCandidates ; i++) {
+			if (primalityResults[i]) {
+				task.check.factorOffsets[task.check.nCandidates++] = task.check.factorOffsets[i];
+				tupleCounts[1]++;
 			}
 		}
 	}
-#endif
 	
 	for (uint32_t i(0) ; i < task.check.nCandidates ; i++) {
 		if (!_works[workIndex].current) break;
 		candidate = candidateStart + _primorial*task.check.factorOffsets[i];
 		
-#if defined(__SSE2__) && defined(__AVX2__)
-		if (!firstTestDone) { // Test candidate + 0 primality without optimizations if not done before.
+		if (!firstTestDone) { // Test candidate + 0 primality without optimizations/GPU if not done before.
 			tupleCounts[0]++;
 			if (!isPrimeFermat(candidate)) continue;
 			tupleCounts[1]++;
 		}
-#else
-		tupleCounts[0]++;
-		if (!isPrimeFermat(candidate)) continue;
-		tupleCounts[1]++;
-#endif
 		
 		uint32_t primeCount(1), offsetSum(0);
 		// Test primality of the other elements of the tuple if candidate + 0 is prime.

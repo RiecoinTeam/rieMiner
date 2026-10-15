@@ -36,6 +36,10 @@ using namespace std::string_literals;
 
 #define primeTableFile	"PrimeTable64.bin"
 
+#ifdef RIEMINERCUDA
+	template<int bits> void fermatCudaTest(const std::vector<mpz_class>&, uint32_t*, const uint16_t);
+#endif
+
 namespace Stella {
 class SysInfo {
 	std::string _os, _cpuArchitecture, _cpuBrand;
@@ -151,6 +155,10 @@ struct Configuration {
 	std::vector<bool> patternMin{};
 	uint32_t primeCountTarget{0}, primeCountMin{0};
 	uint64_t initialBits{0}, initialTargetBits{0};
+#ifdef RIEMINERCUDA
+	bool gpuFermatTest{true};
+	uint16_t gpuFermatTestId{0U};
+#endif
 };
 
 // Stella Job, containing just the Target. To alter other parameters like the Pattern or Max Offset, the Instance must be reintialized.
@@ -186,7 +194,11 @@ inline std::vector<mpz_class> v64ToVMpz(const std::vector<uint64_t> &v64) {
 
 constexpr uint32_t sieveCacheSize(32);
 constexpr uint32_t nWorks(2);
+#ifdef RIEMINERCUDA
+constexpr uint32_t maxCandidatesPerCheckTask(512);
+#else
 constexpr uint32_t maxCandidatesPerCheckTask(64);
+#endif
 // Create an Instance to generate Prime Constellations. It must be initialized with parameters appropriate for the Stella Jobs that will be worked on by the Instance.
 // Altering the initial parameters require a reinitialization of the Instance (or making a new one).
 class Instance {
@@ -274,6 +286,10 @@ class Instance {
 	};
 	
 	uint16_t _threads, _sieveWorkers;
+#ifdef RIEMINERCUDA
+	bool _gpuFermatTest;
+	uint16_t _gpuFermatTestId;
+#endif
 	std::thread _masterThread;
 	std::vector<std::thread> _workerThreads;
 	// Miner data (generated in init)
@@ -342,6 +358,9 @@ class Instance {
 	bool _testPrimesIspc(const std::array<uint32_t, maxCandidatesPerCheckTask>&, uint32_t[maxCandidatesPerCheckTask], const mpz_class&, mpz_class&);
 #endif
 #endif
+#ifdef RIEMINERCUDA
+	bool _testPrimesCuda(const std::array<uint32_t, maxCandidatesPerCheckTask>&, std::vector<uint32_t>&, const mpz_class&, mpz_class&, const uint16_t);
+#endif
 	void _doSieveTask(Task);
 	void _doCheckTask(Task);
 	void _doTasks(uint16_t);
@@ -406,6 +425,12 @@ public:
 		if (_inited) {
 			std::string str;
 			str += "\tThreads: "s + std::to_string(_threads) + " ("s + std::to_string(_sieveWorkers) + " Sieve Worker(s))\n"s;
+#ifdef RIEMINERCUDA
+			if (_gpuFermatTest)
+				str += "\tFermat Primality Tests on GPU "s + std::to_string(_gpuFermatTestId) + "\n"s;
+			else
+				str += "\tFermat Primality Tests on CPU\n"s;
+#endif
 			str += "\tConstellation pattern: n + ("s + formatContainer(_patternCumulative) + "), length "s + std::to_string(_pattern.size()) + "\n"s;
 			str += "\tPrime Table: "s + std::to_string(_nPrimes) + " entries, largest " + std::to_string(_getPrime(_nPrimes - 1ULL)) + "\n"s;
 			if (_primeTableExtracted)
