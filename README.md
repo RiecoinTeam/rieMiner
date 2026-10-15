@@ -273,7 +273,7 @@ to get
 
 * [Pttn](https://github.com/Pttn), author and maintainer, contact: dev at Pttn dot me
 
-This work is released under the MIT license, except the modified GMP code which is licensed with the LGPL license.
+This work is released under the GPLv3 license.
 
 ### Notable contributors
 
@@ -285,7 +285,7 @@ This work is released under the MIT license, except the modified GMP code which 
 
 Feel free to do a pull request or open an issue, and I will review it. I am open for adding new features, but I also wish to keep this project minimalist. Any useful contribution will be welcomed.
 
-By contributing to rieMiner, you accept to place your code in the MIT license.
+By contributing to rieMiner, you accept to place your code in the GPL license.
 
 Donations to the Riecoin Project are welcome:
 

@@ -262,10 +262,11 @@ int main(int argc, char** argv) {
 	sigaction(SIGPIPE, &sigAction, NULL);
 #endif
 	Configuration configuration;
-	logger.log(std::string(versionString) + ", Riecoin miner by Pttn and contributors\n"s
+	logger.log(std::string(versionString) + ", by the Riecoin Developers\n"s
 	           "Project page: https://riecoin.xyz/rieMiner\n"s
 	           "Riecoin Whitepaper: https://riecoin.xyz/Whitepaper\n"s
-	           "Launch with 'help' as first argument for a quick usage guide\n"s);
+	           "Launch with 'help' as first argument for a quick usage guide\n"s
+	           "Released under the GPLv3 - https://www.gnu.org/licenses/gpl-3.0.en.html\n"s);
 	logger.hr();
 	logger.log("Assembly code by Michael Bell (Rockhawk)\n"s
 	           "G++ "s + std::to_string(__GNUC__) + "."s + std::to_string(__GNUC_MINOR__) + "."s + std::to_string(__GNUC_PATCHLEVEL__) + " - https://gcc.gnu.org/\n"s
